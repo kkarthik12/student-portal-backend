@@ -7,7 +7,7 @@ import os
 
 app = Flask(__name__)
 #CORS(app)
-CORS(app, origins=["https://student-portal-frontend.azurewebsites.net"])
+CORS(app, origins=["https://student-portal-frontend-cdhubsaxfcbwajhy.centralindia-01.azurewebsites.net"])
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGO_URI', 'mongodb://mongo:27017/')
