@@ -1,17 +1,31 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 from bson import ObjectId
 from datetime import datetime
 import os
+import time
 
 app = Flask(__name__)
-#CORS(app)
 CORS(app, origins=["https://student-portal-frontend-cdhubsaxfcbwajhy.centralindia-01.azurewebsites.net"])
 
-# MongoDB connection
+# MongoDB connection with retry
 MONGO_URI = os.getenv('MONGO_URI', 'mongodb://mongo:27017/')
-client = MongoClient(MONGO_URI)
+
+def connect_with_retry(uri, retries=10, delay=3):
+    for attempt in range(retries):
+        try:
+            client = MongoClient(uri, serverSelectionTimeoutMS=3000)
+            client.admin.command('ping')  # forces a connection check
+            print("Connected to MongoDB")
+            return client
+        except ConnectionFailure:
+            print(f"Mongo not ready, retrying ({attempt + 1}/{retries})...")
+            time.sleep(delay)
+    raise ConnectionFailure("Could not connect to MongoDB after retries")
+
+client = connect_with_retry(MONGO_URI)
 db = client['student_portal']
 students_collection = db['students']
 
@@ -49,6 +63,7 @@ def create_student():
         'lastName': data.get('lastName'),
         'email': data.get('email'),
         'studentId': data.get('studentId'),
+        'student_id': data.get('studentId'),   # required by Cosmos DB's shard key (must match field name exactly)
         'course': data.get('course'),
         'year': data.get('year'),
         'gpa': data.get('gpa', 0.0),
@@ -61,6 +76,8 @@ def create_student():
     return jsonify(student), 201
 
 # Update student
+# NOTE: 'student_id' (the shard key) is intentionally NOT included in this $set —
+# Cosmos DB shard key values are immutable after insert.
 @app.route('/api/students/<student_id>', methods=['PUT'])
 def update_student(student_id):
     data = request.json
@@ -107,4 +124,4 @@ def search_students():
     return jsonify([serialize_doc(student) for student in students])
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
